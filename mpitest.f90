@@ -1,6 +1,11 @@
 program mpitest
 
-! mpifort -o test parametersmod.f90 coordsmod.f90 outputmod.f90 averagemod.f90 mpitest.f90 -I/home/public/easybuild/software/netCDF-Fortran/4.5.2-gompi-2020a/include -L/home/public/easybuild/software/netCDF-Fortran/4.5.2-gompi-2020a/lib -lnetcdff
+! Compile line
+! mpifort -o paralleltest parametersmod.f90 coordsmod.f90 outputmod.f90 averagemod.f90 mpitest.f90 -I/home/public/easybuild/software/netCDF-Fortran/4.5.2-gompi-2020a/include -L/home/public/easybuild/software/netCDF-Fortran/4.5.2-gompi-2020a/lib -lnetcdff
+
+! Run line
+! mpirun -np 6 ./paralleltest 1990/10 /home/terraces/datasets/dgvm_input/climate/transient1871-2010_list-formatted.nc test.nc
+
 
 use iso_fortran_env
 use parametersmod,  only : i1,i2,i4,sp,dp
@@ -13,16 +18,7 @@ use mpi
 implicit none
 
 !--------------------
-
-! type infompi
-!   character(100) :: infile
-!   character(100) :: timestring
-!   integer(i2)    :: nproc
-!   integer(i4)    :: t0
-!   integer(i4)    :: nt
-! end type
-
-!--------------------
+! Parallel program to read in list-formatted ncfile an calculate the average of each validcell across specified timeframe
 
 integer :: rank
 integer :: numtasks
@@ -45,7 +41,6 @@ integer(i4), dimension(2) :: job
 integer :: i
 
 !--------------------
-! MPI program starts
 
 call MPI_INIT(ierr)
 

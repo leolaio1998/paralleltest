@@ -13,8 +13,8 @@ type infompi
   character(100) :: infile
   character(100) :: outfile
   character(100) :: timestring
-  integer(i4)    :: ofid
   integer(i2)    :: nproc
+  integer(i4)    :: mpi_info
   integer(i4)    :: t0
   integer(i4)    :: nt
 end type
@@ -25,10 +25,11 @@ contains
 
 !-------------------------------------------------------
 
-subroutine average(info,job)
+subroutine average(info,job,rank)
 
 type(infompi), intent(in) :: info
 integer(i4)  , dimension(2), intent(in) :: job
+
 
 integer(i4), dimension(2) :: srt
 integer(i4), dimension(2) :: cnt
@@ -48,6 +49,8 @@ integer :: tlen
 integer :: rank
 integer :: ierr
 
+integer(i4) :: mpi_info
+
 integer(i2) :: missing_value
 real(sp) :: scale_factor
 real(sp) :: add_offset
@@ -61,7 +64,8 @@ integer :: i
 
 infile = info%infile
 outfile = info%outfile
-ofid = info%ofid
+
+mpi_info = info%mpi_info
 
 srt = [job(1), info%t0]
 
@@ -108,24 +112,26 @@ do i = 1, size(var_out)
 
 end do
 
+write(0,*) 'Rank:', rank, sum(var_out)/size(var_out)
+
 ! --------------------
 
 ! call MPI_COMM_RANK(MPI_COMM_WORLD,rank, ierr)
 !
 ! if(rank == 0) then
 !
-!   call getoutfile(outfile, ofid)
-status = nf90_open_par(outfile,nf90_write,MPI_COMM_WORLD,MPI_INFO_NULL,ofid)
-if (status /= nf90_noerr) call handle_err(status)
+! call getoutfile(outfile, ofid)
+! status = nf90_open(outfile,nf90_write,ofid,comm=MPI_COMM_WORLD,info=mpi_info)
+! if (status /= nf90_noerr) call handle_err(status)
 
-status = nf90_inq_varid(ofid,'ave_tmp',varid)
-if (status /= nf90_noerr) call handle_err(status)
+! status = nf90_inq_varid(ofid,'ave_tmp',varid)
+! if (status /= nf90_noerr) call handle_err(status)
 
-status = nf90_put_var(ofid,varid,var_out)
-if (status /= nf90_noerr) call handle_err(status)
-
-status = nf90_close(ofid)
-if (status /= nf90_noerr) call handle_err(status)
+! status = nf90_put_var(ofid,varid,var_out)
+! if (status /= nf90_noerr) call handle_err(status)
+! !
+! status = nf90_close(ofid)
+! if (status /= nf90_noerr) call handle_err(status)
 
 ! end if
 

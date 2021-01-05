@@ -48,6 +48,8 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD, numtasks, ierr)
 
 call MPI_COMM_RANK(MPI_COMM_WORLD, rank, ierr)
 
+call MPI_INFO_CREATE(info%mpi_info, ierr)
+
 !--------------------
 
 allocate(srt(numtasks))
@@ -67,7 +69,7 @@ if (rank == 0) then
 
   call startmpi(info, srt, cnt)
 
-  call getoutfile(info%outfile, info%ofid)
+  call getoutfile(info%outfile, info%mpi_info)
 
   call infotobyte(info, srt, cnt, ob)
 
@@ -97,8 +99,7 @@ write(0,*) 'Rank', rank, 'recieved srt and cnt: ', job
 
 !--------------------
 
-call average(info, job)
-
+call average(info, job, rank)
 
 call MPI_FINALIZE(ierr)
 
@@ -108,7 +109,7 @@ call MPI_FINALIZE(ierr)
 
 contains
 
-subroutine startmpi(info, srt, cnt)
+subroutine startmpi(info,srt,cnt)
 
 type(infompi), target              , intent(inout) :: info
 integer(i4),           dimension(:), intent(inout) :: srt

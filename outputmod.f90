@@ -13,11 +13,13 @@ contains
 
 !-------------------------------------------------------
 
-subroutine getoutfile(outfile, ofid)
+subroutine getoutfile(outfile,mpiinfo)
 
 character(*), intent(in) :: outfile
-integer(i4), intent(out) :: ofid
 
+integer(i4) :: mpiinfo
+
+integer :: ofid
 integer :: status
 integer :: varid
 integer :: dimid
@@ -27,12 +29,12 @@ integer :: i
 character(8) :: today
 character(10) :: now
 
+write(0,*) 'Creating outfile'
 
-
-status = nf90_create_par(outfile,nf90_clobber,MPI_COMM_WORLD,MPI_INFO_NULL,ofid)
+status = nf90_create(outfile,nf90_netcdf4,ofid) !,comm=MPI_COMM_WORLD,info=mpiinfo)
 if (status/=nf90_noerr) call handle_err(status)
 
-status = nf90_put_att(ofid,nf90_global,'title','weathergen output file')
+status = nf90_put_att(ofid,nf90_global,'title','paralleltest output file')
 if (status/=nf90_noerr) call handle_err(status)
 
 call date_and_time(today,now)
@@ -56,8 +58,8 @@ if (status/=nf90_noerr) call handle_err(status)
 status = nf90_def_var(ofid,'index',nf90_int,dimid,varid)
 if (status/=nf90_noerr) call handle_err(status)
 
-status = nf90_put_var(ofid,varid,(/(i,i=1,83269,1)/))
-if (status/=nf90_noerr) call handle_err(status)
+! status = nf90_put_var(ofid,varid,(/(i,i=1,83269,1)/))
+! if (status/=nf90_noerr) call handle_err(status)
 
 status = nf90_put_att(ofid,varid,'long_name','index of lon and lat')
 if (status/=nf90_noerr) call handle_err(status)
@@ -87,11 +89,17 @@ if (status/=nf90_noerr) call handle_err(status)
 status = nf90_put_att(ofid,varid,'scale_factor',0.1)
 if (status/=nf90_noerr) call handle_err(status)
 
+write(0,*) 'Finishing create outfile'
+
 
 !----
 
 status = nf90_enddef(ofid)
 if (status/=nf90_noerr) call handle_err(status)
+
+status = nf90_close(ofid)
+if (status /= nf90_noerr) call handle_err(status)
+
 
 
 end subroutine getoutfile

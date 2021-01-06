@@ -13,11 +13,10 @@ contains
 
 !-------------------------------------------------------
 
-subroutine getoutfile(outfile,mpiinfo)
+subroutine getoutfile(outfile,validcell)
 
 character(*), intent(in) :: outfile
-
-integer(i4) :: mpiinfo
+integer(i4) , intent(in) :: validcell
 
 integer :: ofid
 integer :: status
@@ -31,8 +30,13 @@ character(10) :: now
 
 write(0,*) 'Creating outfile'
 
-status = nf90_create(outfile,nf90_netcdf4,ofid) !,comm=MPI_COMM_WORLD,info=mpiinfo)
+status = nf90_create(outfile,nf90_netcdf4,ofid)
 if (status/=nf90_noerr) call handle_err(status)
+
+! status = nf90_create_par(outfile,ior(nf90_netcdf4,nf90_mpiio),MPI_COMM_WORLD,MPI_INFO_NULL,ofid)
+! if (status/=nf90_noerr) call handle_err(status)
+
+write(0,*) 'Create outfile: success'
 
 status = nf90_put_att(ofid,nf90_global,'title','paralleltest output file')
 if (status/=nf90_noerr) call handle_err(status)
@@ -52,14 +56,14 @@ if (status/=nf90_noerr) call handle_err(status)
 !----
 ! index
 
-status = nf90_def_dim(ofid,'index',83269,dimid)
+status = nf90_def_dim(ofid,'index',validcell,dimid)
 if (status/=nf90_noerr) call handle_err(status)
 
 status = nf90_def_var(ofid,'index',nf90_int,dimid,varid)
 if (status/=nf90_noerr) call handle_err(status)
 
-! status = nf90_put_var(ofid,varid,(/(i,i=1,83269,1)/))
-! if (status/=nf90_noerr) call handle_err(status)
+status = nf90_put_var(ofid,varid,(/(i,i=1,validcell,1)/))
+if (status/=nf90_noerr) call handle_err(status)
 
 status = nf90_put_att(ofid,varid,'long_name','index of lon and lat')
 if (status/=nf90_noerr) call handle_err(status)
@@ -71,7 +75,7 @@ if (status/=nf90_noerr) call handle_err(status)
 !----
 !average temperature
 
-status = nf90_def_var(ofid,'ave_tmp',nf90_short,dimid,varid,deflate_level=1,shuffle=.true.)
+status = nf90_def_var(ofid,'ave_tmp',nf90_short,dimid,varid)
 if (status/=nf90_noerr) call handle_err(status)
 
 status = nf90_put_att(ofid,varid,'long_name','test average temperature')
@@ -89,9 +93,6 @@ if (status/=nf90_noerr) call handle_err(status)
 status = nf90_put_att(ofid,varid,'scale_factor',0.1)
 if (status/=nf90_noerr) call handle_err(status)
 
-write(0,*) 'Finishing create outfile'
-
-
 !----
 
 status = nf90_enddef(ofid)
@@ -99,6 +100,8 @@ if (status/=nf90_noerr) call handle_err(status)
 
 status = nf90_close(ofid)
 if (status /= nf90_noerr) call handle_err(status)
+
+write(0,*) 'Finished create outfile'
 
 
 

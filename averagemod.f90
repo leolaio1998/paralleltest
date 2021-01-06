@@ -13,8 +13,8 @@ type infompi
   character(100) :: infile
   character(100) :: outfile
   character(100) :: timestring
-  integer(i2)    :: nproc
-  integer(i4)    :: mpi_info
+  integer(i4)    :: nproc
+  integer(i4)    :: validcell
   integer(i4)    :: t0
   integer(i4)    :: nt
 end type
@@ -40,11 +40,7 @@ character(100) :: outfile
 integer :: status
 integer :: ifid
 integer :: ofid
-integer :: dimid
 integer :: varid
-integer :: xlen
-integer :: ylen
-integer :: tlen
 
 integer :: rank
 integer :: ierr
@@ -55,8 +51,8 @@ integer(i2) :: missing_value
 real(sp) :: scale_factor
 real(sp) :: add_offset
 
-real(sp), allocatable, dimension(:,:) :: var_in
-integer(i4), allocatable, dimension(:) :: var_out
+real(sp)   , allocatable, dimension(:,:) :: var_in
+integer(i2), allocatable, dimension(:)   :: var_out
 
 integer :: i
 
@@ -65,8 +61,6 @@ integer :: i
 infile = info%infile
 outfile = info%outfile
 
-mpi_info = info%mpi_info
-
 srt = [job(1), info%t0]
 
 cnt = [job(2), info%nt]
@@ -74,6 +68,7 @@ cnt = [job(2), info%nt]
 allocate(var_in(cnt(1),cnt(2)))
 
 ! --------------------
+! Read temperature variable from infile
 
 status = nf90_open(infile,nf90_nowrite,ifid)
 if (status /= nf90_noerr) call handle_err(status)
@@ -103,6 +98,7 @@ elsewhere
 end where
 
 ! --------------------
+! Calculate average temperature of each validcell over entire time period
 
 allocate(var_out(size(var_in,1)))
 
@@ -112,28 +108,26 @@ do i = 1, size(var_out)
 
 end do
 
-write(0,*) 'Rank:', rank, sum(var_out)/size(var_out)
+write(0,*) 'Rank', rank, 'var_in min/max check:',minval(var_in), maxval(var_in)
 
 ! --------------------
+! Write average temperature (var_out) into the outfile
 
-! call MPI_COMM_RANK(MPI_COMM_WORLD,rank, ierr)
-!
-! if(rank == 0) then
-!
-! call getoutfile(outfile, ofid)
-! status = nf90_open(outfile,nf90_write,ofid,comm=MPI_COMM_WORLD,info=mpi_info)
-! if (status /= nf90_noerr) call handle_err(status)
+call MPI_BARRIER(MPI_COMM_WORLD, ierr)
 
-! status = nf90_inq_varid(ofid,'ave_tmp',varid)
-! if (status /= nf90_noerr) call handle_err(status)
+status = nf90_open(outfile,nf90_write,ofid,comm=MPI_COMM_WORLD,info=MPI_INFO_NULL)
+if (status /= nf90_noerr) call handle_err(status)
 
-! status = nf90_put_var(ofid,varid,var_out)
-! if (status /= nf90_noerr) call handle_err(status)
-! !
-! status = nf90_close(ofid)
-! if (status /= nf90_noerr) call handle_err(status)
+status = nf90_inq_varid(ofid,'ave_tmp',varid)
+if (status /= nf90_noerr) call handle_err(status)
 
-! end if
+status = nf90_put_var(ofid,varid,var_out,start=srt,count=cnt)
+if (status /= nf90_noerr) call handle_err(status)
+
+write(0,*) 'Data written successfully by rank', rank
+
+status = nf90_close(ofid)
+if (status /= nf90_noerr) call handle_err(status)
 
 ! --------------------
 

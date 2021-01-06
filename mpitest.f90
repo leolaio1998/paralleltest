@@ -1,13 +1,14 @@
 program mpitest
 
+! before compiling
+! module load netCDF-Fortran/4.5.3-gmpich-2021.01
+
 ! Compile line
-! mpifort -o paralleltest parametersmod.f90 coordsmod.f90 outputmod.f90 averagemod.f90 mpitest.f90 -I/home/public/easybuild/software/netCDF-Fortran/4.5.2-gompi-2020a/include -L/home/public/easybuild/software/netCDF-Fortran/4.5.2-gompi-2020a/lib -lnetcdff
+! mpifort -g -Wall -fcheck=all -o paralleltest parametersmod.f90 coordsmod.f90 outputmod.f90 averagemod.f90 mpitest.f90 -I/home/public/easybuild/software/netCDF-Fortran/4.5.3-gmpich-2021.01/include -L/home/public/easybuild/software/netCDF-Fortran/4.5.3-gmpich-2021.01/lib -lnetcdff
 
 ! Run line
-! mpirun -np 6 ./paralleltest 1990/10 /home/terraces/datasets/dgvm_input/climate/transient1871-2010_list-formatted.nc test.nc
+! mpirun -np 2 ./paralleltest 1871/140 /home/terraces/datasets/dgvm_input/climate/transient1871-2010_list-formatted.nc test.nc
 
-
-use iso_fortran_env
 use parametersmod,  only : i1,i2,i4,sp,dp
 use coordsmod,      only : index,parsecoords
 use outputmod,      only : getoutfile,handle_err
@@ -22,9 +23,7 @@ implicit none
 
 integer :: rank
 integer :: numtasks
-integer :: source
 integer :: ierr
-integer :: status(MPI_STATUS_SIZE)
 
 integer :: infosize
 integer :: sendsize
@@ -38,7 +37,8 @@ integer(i1), allocatable, dimension(:) :: ob
 
 integer(i4), dimension(2) :: job
 
-integer :: i
+real :: start_time
+real :: end_time
 
 !--------------------
 
@@ -48,12 +48,17 @@ call MPI_COMM_SIZE(MPI_COMM_WORLD, numtasks, ierr)
 
 call MPI_COMM_RANK(MPI_COMM_WORLD, rank, ierr)
 
-call MPI_INFO_CREATE(info%mpi_info, ierr)
-
 !--------------------
+
+call CPU_TIME(start_time)
+
+! ---
 
 allocate(srt(numtasks))
 allocate(cnt(numtasks))
+
+srt = 0
+cnt = 0
 
 info%nproc = numtasks
 
@@ -63,35 +68,58 @@ sendsize = infosize + (8*numtasks)
 
 allocate(ob(sendsize))
 
+ob = 0
+
 !--------------------
 
 if (rank == 0) then
 
   call startmpi(info, srt, cnt)
 
-  call getoutfile(info%outfile, info%mpi_info)
+  info%validcell = sum(cnt)
+
+  call getoutfile(info%outfile, info%validcell)
 
   call infotobyte(info, srt, cnt, ob)
 
-  do i = 1, numtasks-1
+!   do i = 1, numtasks-1
+!
+!     call MPI_SEND(ob, sendsize, MPI_INTEGER, i, 0, MPI_COMM_WORLD, ierr)
+!
+!   end do
+!
+!   call bytetoinfo(info, srt, cnt, ob)
+!
+!   write(0,*) 'srt from rank 0', srt
+!
+! else
+!
+!   call MPI_RECV(ob, sendsize, MPI_INTEGER, 0, 0, MPI_COMM_WORLD, status, ierr)
+!
+!   write(0,*) 'timestring:', info%timestring, 'sendsize:', sendsize
+!
+!   call bytetoinfo(info, srt, cnt, ob)
 
-    call MPI_SEND(ob, size(ob), MPI_INTEGER, i, 0, MPI_COMM_WORLD, ierr)
+end if
 
-  end do
+! ---
+! Broadcast all info to all processes
 
-  call bytetoinfo(info, srt, cnt, ob)
+call MPI_BARRIER(MPI_COMM_WORLD, ierr)
 
-else
+call MPI_BCAST(ob, (sendsize/4), MPI_INTEGER, 0, MPI_COMM_WORLD, ierr) ! For some reason, count is calculated in byte????
 
-  call MPI_RECV(ob, sendsize, MPI_INTEGER, 0, 0, MPI_COMM_WORLD, status, ierr)
+! ---
+
+if (rank == 0) write(0,*) 'Broadcast complete'
+
+if (rank /= 0) then
 
   call bytetoinfo(info, srt, cnt, ob)
 
 end if
 
-! call MPI_Bcast(ob, sendsize, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-
-! call bytetoinfo(info, srt, cnt, ob)
+! ---
 
 job = [srt(rank+1), cnt(rank+1)]
 
@@ -100,6 +128,14 @@ write(0,*) 'Rank', rank, 'recieved srt and cnt: ', job
 !--------------------
 
 call average(info, job, rank)
+
+!---
+
+call CPU_TIME(end_time)
+
+if (rank == 0) write(0,*) "Total CPU time used by Rank 0:", end_time - start_time
+
+!---
 
 call MPI_FINALIZE(ierr)
 
@@ -117,26 +153,18 @@ integer(i4),           dimension(:), intent(inout) :: cnt
 
 integer :: i
 integer :: n
-integer :: x
-integer :: t
 
 integer :: status
 integer :: ifid
-integer :: ofid
 integer :: dimid
-integer :: varid
 integer :: ilen
 integer :: tlen
-
-real(sp)    :: scale_factor
-real(sp)    :: add_offset
-integer(i4) :: imissing
 
 !--- File variables
 character(100), pointer :: infile
 character(100), pointer :: outfile
 character(100), pointer :: timestring
-integer(i2)   , pointer :: nproc
+integer(i4)   , pointer :: nproc
 integer(i4)   , pointer :: t0
 integer(i4)   , pointer :: nt
 
@@ -144,7 +172,6 @@ integer :: len
 integer :: remainder
 
 type(index) :: timevals
-integer(i4), allocatable, dimension(:,:) :: tmp
 
 integer(i4) :: baseyr
 integer(i4) :: startyr
@@ -188,8 +215,6 @@ call parsecoords(timestring,timevals)
 
 startyr = timevals%minlon
 calcyrs = timevals%minlat
-
-! cntt = 12 * (calcyrs + 2)
 
 t0 = 1 + 12 * (startyr - baseyr)
 t1 = t0 + 12 * calcyrs - 1
